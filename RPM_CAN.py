@@ -1,3 +1,4 @@
+#Old RPM code, uses an exported message log and a different method to find the RPM of the car (not in real time)
 import re
 import matplotlib.pyplot as plt
 from collections import defaultdict
@@ -29,7 +30,7 @@ def buscar_y_graficar_rpm(archivo_txt, rpm_max_esperado=3000):
                     data_by_id[can_id].append(data_bytes)
                     time_by_id[can_id].append(i)
                 except ValueError:
-                    continue  # Saltar líneas con caracteres no-hex
+                    continue  # Skip lines with non-hex characters
 
     candidatos = []
 
@@ -39,7 +40,7 @@ def buscar_y_graficar_rpm(archivo_txt, rpm_max_esperado=3000):
 
         msg_len = min(len(m) for m in messages)
 
-        # ── Análisis de señales de 16 bits (pares de bytes) ──────────
+        # ── 16-bit signals analysis (pairs of bytes) ──────────
         for bi in range(msg_len - 1):
             be_raw = [(m[bi] << 8 | m[bi + 1]) for m in messages]
             le_raw = [(m[bi + 1] << 8 | m[bi]) for m in messages]
@@ -60,7 +61,7 @@ def buscar_y_graficar_rpm(archivo_txt, rpm_max_esperado=3000):
                                    (bi, bi + 1), factor_name,
                                    rpm_max_esperado)
 
-        # ── Análisis de señales de 8 bits (byte individual) ──────────
+        # ── 8-bit signals analysis (individual byte) ──────────
         for bi in range(msg_len):
             byte_vals = [m[bi] for m in messages]
             escalas_8 = [
@@ -124,39 +125,40 @@ def _evaluar_candidato(candidatos, can_id, vals, times, bytes_idx,
     rango    = max_v - min_v
     unique_v = len(set(round(v, 1) for v in vals))
 
-    # Descartar señales estáticas (rango muy pequeño = no es señal dinámica)
+    # Discard static signals (rango very small = not a dynamic signal)
     if rango < 150:
         return
-    # Descartar valores negativos (RPM no son negativas)
+    # Discard negative values (RPM are not negative)
     if min_v < -10:
         return
-    # Descartar si el máximo supera ampliamente lo esperado
-    # (evita falsos positivos con señales de temperatura, presión, etc.)
+    # Discard if the maximum exceeds what is expected
+    # (avoids false positives with temperature, pressure, etc.)
     if max_v > rpm_max_esperado * 1.5:
         return
-    # Descartar si el máximo es demasiado pequeño (no parece RPM)
+    # Discard if the maximum is too small (doesn't seem like RPM)
     if max_v < 100:
         return
-    # Descartar señales casi binarias (pocas variaciones = flag o estado)
+    # Discard almost binary signals (few variations = flag or status)
     if unique_v < 15:
         return
 
-    # ── Score: menor = mejor candidato ───────────────────────────────
-    # Penalizar si el máximo está lejos de rpm_max_esperado
+    # ── Score: smaller = better candidate ───────────────────────────────
+    # Penalize if the maximum is far from rpm_max_esperado
     penalidad_max = abs(max_v - rpm_max_esperado) / rpm_max_esperado
-    # Penalizar si el mínimo no está cerca de 0 (aunque no lo exigimos)
+    # Penalize if the minimum is not close to 0 (even if we don't require it)
     penalidad_min = min_v / rpm_max_esperado
-    # Premiar señales con más variación (más dinámicas)
+    # Reward signals with more variation (more dynamic)
     bonus_variedad = -unique_v / len(vals)
 
     # ─────────────────────────────────────────────────────────────────
     if len(vals) > 1:
         cambios = [abs(vals[k+1] - vals[k]) for k in range(len(vals)-1)]
-        suavidad = (sum(cambios) / len(cambios)) / rango  # 0 = suave, 1 = muy ruidosa
+        suavidad = (sum(cambios) / len(cambios)) / rango  # 0 = Smooth signal, 1 = very noisy
     else:
         suavidad = 1.0
 
-    penalidad_ruido = suavidad * 2   # peso alto: señal ruidosa → descartada
+    # high weight: noisy signal -> discarded
+    penalidad_ruido = suavidad * 2   
 
     score = penalidad_max + penalidad_min + bonus_variedad + penalidad_ruido
 
@@ -173,5 +175,5 @@ def _evaluar_candidato(candidatos, can_id, vals, times, bytes_idx,
     })
 
 
-# ── Ejecutar ──────────────────────────────────────────────────────────
+# ── RUN ──────────────────────────────────────────────────────────
 buscar_y_graficar_rpm("Can_Datos_1.txt", rpm_max_esperado=3000)

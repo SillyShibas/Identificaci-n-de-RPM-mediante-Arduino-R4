@@ -1,0 +1,22 @@
+// CAN READ
+
+#include <Arduino_CAN.h>
+
+void setup()
+{
+  Serial.begin(115200);
+  while (!Serial) { }
+
+  if (!CAN.begin(CanBitRate::BR_500k))
+  {
+    Serial.println("CAN.begin(...) failed.");
+    for (;;) {}
+  }
+}
+
+void loop(){
+  if (CAN.available()){
+    CanMsg const msg = CAN.read();
+    Serial.println(msg);
+  }
+}
